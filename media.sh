@@ -73,6 +73,51 @@ setup_environment() {
   log "${GREEN}✔${NC} Setup complete."
 }
 
+create_volume_test() {
+  PARTITION="$1"
+  if [ -z "$PARTITION" ]; then
+    log "${RED}✘${NC} No partition specified. Usage: $0 create-test /dev/sdXn"
+    exit 1
+  fi
+
+  # Confirm partition exists
+  if ! lsblk "$PARTITION" &>/dev/null; then
+    log "${RED}✘${NC} Partition $PARTITION does not exist."
+    exit 1
+  fi
+
+  # Check if already formatted
+  if blkid "$PARTITION" | grep -q 'TYPE='; then
+    log "${YELLOW}⚠${NC} Partition $PARTITION already has a filesystem."
+  fi
+
+  # Get UUID
+  UUID=$(lsblk -no UUID "$PARTITION")
+  if [ -z "$UUID" ]; then
+    log "${RED}✘${NC} Failed to retrieve UUID from $PARTITION."
+    exit 1
+  fi
+
+  # Determine next available mediaX name
+  if [ ! -f "$VOLUME_FILE" ]; then
+    echo '{}' > "$VOLUME_FILE"
+  fi
+  NEXT_ID=$(jq -r 'keys[] | select(startswith("media"))' "$VOLUME_FILE" | sed 's/media//' | sort -n | tail -1)
+  NEXT_ID=$((NEXT_ID + 1))
+  VOLUME="media$NEXT_ID"
+
+  MOUNT_POINT="/media/$VOLUME"
+
+  # Dry-run output
+  echo "Dry-run: Here's what would happen:"
+  echo " - Format $PARTITION with LUKS"
+  echo " - Open LUKS volume /dev/disk/by-uuid/$UUID as $VOLUME"
+  echo " - Create ext4 filesystem on /dev/mapper/$VOLUME"
+  echo " - Create mount point at $MOUNT_POINT"
+  echo " - Mount /dev/mapper/$VOLUME to $MOUNT_POINT"
+  echo " - Update volumes.json with \"$VOLUME\": \"$UUID\""
+}
+
 # Load volumes from JSON
 if [[ ! -f "$VOLUME_FILE" ]]; then
   echo "Volume config file not found: $VOLUME_FILE"
@@ -148,7 +193,7 @@ status_volumes() {
 # Main logic
 MODE="$1"
 if [[ -z "$MODE" ]]; then
-  echo "Usage: $0 {open|close|status}"
+  echo "Usage: $0 {open|close|status|setup|create-test}"
   exit 1
 fi
 
@@ -157,9 +202,10 @@ case "$MODE" in
   close) close_volumes ;;
   status) status_volumes ;;
   setup) setup_environment ;;
+  create-test) create_volume_test "$2" ;;
   *)
     echo "Invalid mode: $MODE"
-    echo "Usage: $0 {open|close|status|setup}"
+    echo "Usage: $0 {open|close|status|setup|create-test}"
     exit 1
     ;;
 esac
