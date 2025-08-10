@@ -96,7 +96,7 @@ else
 fi
 
 # 🧾 Summary Report
-log "\n${YELLOW}===== Summary =====${NC}"
+log "${YELLOW}===== Summary =====${NC}"
 log "Total files processed: ${TOTAL}"
 
 if [[ "$MODE" == "check" ]]; then

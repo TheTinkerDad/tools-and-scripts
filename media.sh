@@ -21,7 +21,7 @@ VOLUME_FILE="./media.json"
 # Function to log messages with timestamp
 log() {
   printf -v LOGDATE '%(%Y-%m-%d %H:%M:%S)T' -1
-  echo "$LOGDATE $1"
+  echo -e "$LOGDATE $1"
 }
 
 setup_environment() {
