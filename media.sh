@@ -240,11 +240,15 @@ status_volumes() {
   done
 }
 
+usage() {
+  echo "Usage: $0 {open|close|status|setup|create|create-test}"
+  exit 1
+}
+
 # Main logic
 MODE="$1"
 if [[ -z "$MODE" ]]; then
-  echo "Usage: $0 {open|close|status|setup|create-test}"
-  exit 1
+  usage
 fi
 
 # Load volumes from JSON
@@ -267,7 +271,6 @@ case "$MODE" in
   create-test) create_volume_test "$2" ;;
   *)
     echo "Invalid mode: $MODE"
-    echo "Usage: $0 {open|close|status|setup|create-test}"
-    exit 1
+    usage
     ;;
 esac
