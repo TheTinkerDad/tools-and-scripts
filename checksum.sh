@@ -1,10 +1,5 @@
 #!/bin/bash
 
-function log() {
-  printf -v LOGDATE '%(%Y-%m-%d %H:%M:%S)T' -1
-  echo -e "$LOGDATE $1"
-}
-
 # Colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -22,31 +17,16 @@ VERIFIED_FAIL=0
 SKIPPED=0
 CREATED=0
 
-rm failed_files.log >/dev/null 2>&1
+function log() {
+  printf -v LOGDATE '%(%Y-%m-%d %H:%M:%S)T' -1
+  echo -e "$LOGDATE $1"
+}
 
-# Parse arguments
-for arg in "$@"; do
-  case "$arg" in
-    -c|--check)
-      MODE="check"
-      ;;
-    --force)
-      FORCE=true
-      ;;
-    *)
-      echo -e "Unknown option: $arg"
-      echo "Usage: $0 [-c|--check] [--force]"
-      exit 1
-      ;;
-  esac
-done
-
-log "${YELLOW}===== Checksum script running in '$MODE' mode using SHA-256 =====${NC}"
-
-# Loop through all regular files (excluding .sha256 files)
-while IFS= read -r FILE; do
-  SHA256FILE="${FILE}.sha256"
+function process_file() {
+  local FILE="$1"
+  local SHA256FILE="${FILE}.sha256"
   ((TOTAL++))
+
   if [[ "$MODE" == "check" ]]; then
     if [[ -f "$SHA256FILE" ]]; then
       log "Checking ${FILE} against ${SHA256FILE}..."
@@ -59,7 +39,7 @@ while IFS= read -r FILE; do
         echo "${FILE}" >>failed_files.log
       fi
     else
-      log "${YELLOW}⚠ ${NC} No checksum file found for ${FILE}."
+      log "${YELLOW}⚠${NC} No checksum file found for ${FILE}."
       ((VERIFIED_FAIL++))
     fi
   else
@@ -73,7 +53,47 @@ while IFS= read -r FILE; do
       ((CREATED++))
     fi
   fi
-done < <(find . -maxdepth 1 -type f ! -name "*.sha256")
+}
+
+rm failed_files.log >/dev/null 2>&1
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--check)
+      MODE="check"
+      shift
+      ;;
+    --force)
+      FORCE=true
+      shift
+      ;;
+    --file)
+      TARGET_FILE="$2"
+      shift 2
+      ;;
+    *)
+      echo -e "Unknown option: $1"
+      echo "Usage: $0 [-c|--check] [--force] [--file <filename>]"
+      exit 1
+      ;;
+  esac
+done
+
+log "${YELLOW}===== Checksum script running in '$MODE' mode using SHA-256 =====${NC}"
+
+if [[ -n "$TARGET_FILE" ]]; then
+  if [[ ! -f "$TARGET_FILE" ]]; then
+    log "${RED}✘${NC} Specified file '$TARGET_FILE' does not exist."
+    exit 1
+  fi
+  process_file "$TARGET_FILE"
+else
+  # Loop through all regular files (excluding .sha256 files)
+  while IFS= read -r FILE; do
+    process_file $FILE
+  done < <(find . -maxdepth 1 -type f ! -name "*.sha256")
+fi
 
 # 🧾 Summary Report
 log "\n${YELLOW}===== Summary =====${NC}"
