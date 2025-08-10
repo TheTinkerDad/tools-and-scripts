@@ -14,6 +14,7 @@
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 VOLUME_FILE="./media.json"
@@ -118,17 +119,66 @@ create_volume_test() {
   echo " - Update volumes.json with \"$VOLUME\": \"$UUID\""
 }
 
-# Load volumes from JSON
-if [[ ! -f "$VOLUME_FILE" ]]; then
-  echo "Volume config file not found: $VOLUME_FILE"
-  exit 1
-fi
+create_volume() {
+  PARTITION="$1"
+  if [ -z "$PARTITION" ]; then
+    log "${RED}✘${NC} No partition specified. Usage: $0 create /dev/sdXn"
+    exit 1
+  fi
 
-# Read JSON into associative array
-declare -A VOLUMES
-while IFS="=" read -r name uuid; do
-  VOLUMES["$name"]="$uuid"
-done < <(jq -r 'to_entries[] | "\(.key)=\(.value)"' "$VOLUME_FILE")
+  # Confirm partition exists
+  if ! lsblk "$PARTITION" &>/dev/null; then
+    log "${RED}✘${NC} Partition $PARTITION does not exist."
+    exit 1
+  fi
+
+  # Confirm it's not already formatted
+  if blkid "$PARTITION" | grep -q 'TYPE='; then
+    log "${RED}✘${NC} Partition $PARTITION already has a filesystem. Aborting."
+    exit 1
+  fi
+
+  # Format with LUKS
+  log "Formatting $PARTITION with LUKS..."
+  sudo cryptsetup luksFormat "$PARTITION"
+
+  # Get UUID
+  UUID=$(lsblk -no UUID "$PARTITION" | head -n1)
+  if [ -z "$UUID" ]; then
+    log "${RED}✘${NC} Failed to retrieve UUID from $PARTITION."
+    exit 1
+  fi
+
+  # Determine next available mediaX name
+  if [ ! -f "$VOLUME_FILE" ]; then
+    echo '{}' > "$VOLUME_FILE"
+  fi
+  NEXT_ID=$(jq -r 'keys[] | select(startswith("media"))' "$VOLUME_FILE" | sed 's/media//' | sort -n | tail -1)
+  NEXT_ID=$((NEXT_ID + 1))
+  VOLUME="media$NEXT_ID"
+
+  # Open LUKS volume
+  log "Opening LUKS volume as $VOLUME..."
+  sudo cryptsetup luksOpen "/dev/disk/by-uuid/$UUID" "$VOLUME"
+
+  # Format with ext4
+  log "Creating ext4 filesystem on /dev/mapper/$VOLUME..."
+  sudo mkfs.ext4 "/dev/mapper/$VOLUME"
+
+  # Create mount point
+  MOUNT_POINT="/media/$VOLUME"
+  log "Creating mount point at $MOUNT_POINT..."
+  sudo mkdir -p "$MOUNT_POINT"
+
+  # Mount the volume
+  log "Mounting /dev/mapper/$VOLUME to $MOUNT_POINT..."
+  sudo mount "/dev/mapper/$VOLUME" "$MOUNT_POINT"
+
+  # Update volumes.json
+  jq --arg vol "$VOLUME" --arg uuid "$UUID" '. + {($vol): $uuid}' "$VOLUME_FILE" > "${VOLUME_FILE}.tmp" && mv "${VOLUME_FILE}.tmp" "$VOLUME_FILE"
+
+  log "${GREEN}✔${NC} Volume $VOLUME created and mounted at $MOUNT_POINT"
+}
 
 open_volumes() {
   for NAME in "${!VOLUMES[@]}"; do
@@ -196,6 +246,18 @@ if [[ -z "$MODE" ]]; then
   echo "Usage: $0 {open|close|status|setup|create-test}"
   exit 1
 fi
+
+# Load volumes from JSON
+if [[ ! -f "$VOLUME_FILE" ]]; then
+  echo "Volume config file not found: $VOLUME_FILE"
+  exit 1
+fi
+
+# Read JSON into associative array
+declare -A VOLUMES
+while IFS="=" read -r name uuid; do
+  VOLUMES["$name"]="$uuid"
+done < <(jq -r 'to_entries[] | "\(.key)=\(.value)"' "$VOLUME_FILE")
 
 case "$MODE" in
   open) open_volumes ;;
