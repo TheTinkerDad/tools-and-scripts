@@ -92,7 +92,7 @@ create_volume_test() {
   fi
 
   # Get UUID
-  UUID=$(lsblk -no UUID "$PARTITION")
+  UUID=$(lsblk -no UUID "$PARTITION" | head -n1)
   if [ -z "$UUID" ]; then
     log "${RED}✘${NC} Failed to retrieve UUID from $PARTITION."
     exit 1
