@@ -24,6 +24,55 @@ log() {
   echo "$LOGDATE $1"
 }
 
+setup_environment() {
+  log "Checking prerequisites..."
+
+  # Detect package manager
+  if command -v apt-get &>/dev/null; then
+    PKG_MANAGER="apt-get"
+    INSTALL_CMD="sudo apt-get install -y"
+    UPDATE_CMD="sudo apt-get update"
+    DISTRO="Debian/Ubuntu"
+  elif command -v dnf &>/dev/null; then
+    PKG_MANAGER="dnf"
+    INSTALL_CMD="sudo dnf install -y"
+    UPDATE_CMD="sudo dnf check-update"
+    DISTRO="RHEL/Fedora"
+  elif command -v yum &>/dev/null; then
+    PKG_MANAGER="yum"
+    INSTALL_CMD="sudo yum install -y"
+    UPDATE_CMD="sudo yum check-update"
+    DISTRO="RHEL/CentOS"
+  else
+    log "${RED}✘${NC} Unsupported Linux distribution. Cannot detect package manager."
+    exit 1
+  fi
+
+  log "Detected $DISTRO system using $PKG_MANAGER"
+
+  # Update package list
+  log "Updating package list..."
+  $UPDATE_CMD
+
+  # Check and install cryptsetup
+  if ! command -v cryptsetup &>/dev/null; then
+    log "Installing cryptsetup..."
+    $INSTALL_CMD cryptsetup
+  else
+    log "${GREEN}✔${NC} cryptsetup is already installed."
+  fi
+
+  # Check and install jq
+  if ! command -v jq &>/dev/null; then
+    log "Installing jq..."
+    $INSTALL_CMD jq
+  else
+    log "${GREEN}✔${NC} jq is already installed."
+  fi
+
+  log "${GREEN}✔${NC} Setup complete."
+}
+
 # Load volumes from JSON
 if [[ ! -f "$VOLUME_FILE" ]]; then
   echo "Volume config file not found: $VOLUME_FILE"
@@ -107,9 +156,10 @@ case "$MODE" in
   open) open_volumes ;;
   close) close_volumes ;;
   status) status_volumes ;;
+  setup) setup_environment ;;
   *)
     echo "Invalid mode: $MODE"
-    echo "Usage: $0 {open|close|status}"
+    echo "Usage: $0 {open|close|status|setup}"
     exit 1
     ;;
 esac
