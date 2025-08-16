@@ -106,7 +106,7 @@ else
   # Loop through all regular files (excluding .sha256 files)
   while IFS= read -r FILE; do
     process_file $FILE
-  done < <(find . -maxdepth 1 -type f ! -name "*.sha256")
+  done < <(find . -maxdepth 1 -type f ! -name "*.sha256" ! -name "*.sha")
 fi
 
 # 🧾 Summary Report
