@@ -24,6 +24,7 @@ function log() {
 
 function process_file() {
   local FILE="$1"
+  local SHA1FILE="${FILE}.sha"
   local SHA256FILE="${FILE}.sha256"
   ((TOTAL++))
 
@@ -47,6 +48,19 @@ function process_file() {
       log "${YELLOW}⚠${NC} Checksum file already exists for ${FILE}. Skipping..."
       ((SKIPPED++))
     else
+      if [[ -f "$SHA1FILE" ]]; then
+        log "Old ${SHA1FILE} found - checking ${FILE} against it..."
+        if sha1sum -c "$SHA1FILE" &>/dev/null; then
+          log "${GREEN}✔${NC} ${FILE} is valid."
+          mkdir -p ./trash
+          mv $SHA1FILE ./trash
+        else
+          log "${RED}✘${NC} ${FILE} FAILED checksum verification!"
+          echo "${FILE}" >>failed_files.log
+          return 1
+        fi
+      fi
+
       log "${YELLOW}Creating checksum for ${FILE}...${NC}"
       sha256sum "$FILE" > "$SHA256FILE"
       log "${GREEN}✔${NC} Saved to ${SHA256FILE}."
